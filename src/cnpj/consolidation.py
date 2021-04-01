@@ -1,0 +1,1 @@
+cnae_url = "https://cnae.ibge.gov.br/images/concla/documentacao/CNAE_Subclasses_2_3_Estrutura_Detalhada.xlsx"
