@@ -1,11 +1,17 @@
+import sys
+import os
+sys.path.append(os.path.abspath(""))
+from bs4 import BeautifulSoup
+from tqdm import tqdm
+from src.util import join_path, create_dir
+from src.base import Crawler
 import requests
 import os
 import zipfile
-from bs4 import BeautifulSoup
-from src.cnpj.utils import join_path, create_dir
 import sys
 
-class CrawlerCNPJ:
+class CrawlerCNPJ(Crawler):
+
     def __init__(self, save_dir) -> None:
         """
         Instancia o crawler de CNPJ.
@@ -48,7 +54,7 @@ class CrawlerCNPJ:
         with open(save_path, 'wb') as fd:
             fd.write(r.content)
     
-    def get_data(self, overwrite = True):
+    def get_data(self, overwrite):
         """
         Wrapper para o download dos dados.
         
@@ -62,7 +68,7 @@ class CrawlerCNPJ:
         self:
             retorna uma instância do próprio objeto
         """
-        for file in self.files:
+        for file in tqdm(self.files):
             url = self.base_url + file
             save_path = join_path(self.save_dir, file)
             if not os.path.exists(save_path):
@@ -94,10 +100,26 @@ class CrawlerCNPJ:
             else:
                 pass
 
+    def run(self, overwrite = True):
+        """
+        Wrapper para execução dos métodos.
+        
+        Parameters
+        ----------    
+        overwrite : bool
+            Indicador de que os dados devem ser sobescritos, caso já estejam baixados. Se `true`, os arquivos são sobescritos.
+        
+        Returns
+    	-------
+        self:
+            retorna uma instância do próprio objeto
+        """
+        self.get_data(overwrite)
+        self.unzip()
+
 if __name__ == '__main__':
     if type(sys.argv[1]) is str:
         crawler = CrawlerCNPJ(sys.argv[1])
-        crawler.get_data()
-        crawler.unzip()
+        crawler.run()
     else:
         raise Exception("O argumento deve ser um string com o caminho de destino")

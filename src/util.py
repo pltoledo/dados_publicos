@@ -23,7 +23,7 @@ def clean_types(dtype, cols):
                     df = df.withColumn(c, f.initcap(f.trim(unidecode_udf(f.col(c)))))
         if dtype == 'date':
             for c in cols:
-                    df = df.withColumn(c, f.to_date(f.concat_ws('-', f.col(c).substr(1, 4), f.col(c).substr(5, 2), f.col(c).substr(7, 2))))
+                    df = df.withColumn(c, f.to_date(f.col(c), 'yyyyMMdd'))
         return df
     return _
 
