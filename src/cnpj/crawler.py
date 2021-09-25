@@ -1,31 +1,32 @@
-import sys
-import os
-sys.path.append(os.path.abspath(""))
 from bs4 import BeautifulSoup
 from tqdm import tqdm
-from src.util import join_path, create_dir
-from src.base import Crawler
+from util import join_path, create_dir
+from base import Crawler
 import requests
 import os
 import zipfile
-import sys
 
 class CrawlerCNPJ(Crawler):
+    """
+    Class used to extract CNPJ data from the public source.
+    
+    Parameters
+    ----------            
+    save_dir : str
+        Path to where the downloaded data should be stored. It creates a directory if it does not exists already.
 
-    def __init__(self, save_dir) -> None:
-        """
-        Instancia o crawler de CNPJ.
-        
-        Parameters
-        ----------            
-        save_dir : str
-            Caminho para a pasta de destino dos arquivos a serem baixados. Ela é criada caso ainda não exista.
+    Attributes
+    -------
+    base_url : str
+        Url containing all the files to be downloaded
+    
+    files : str
+        Name of the files to be downloaded
+    
+    """
 
-        Returns
-    	-------
-        self:
-            retorna uma instância do próprio objeto
-        """
+    def __init__(self, save_dir: str) -> None:
+
         self.base_url = 'http://200.152.38.155/CNPJ/'
         self.save_dir = save_dir
         create_dir(save_dir)
@@ -34,39 +35,40 @@ class CrawlerCNPJ(Crawler):
         self.files = [i['href'] for i in soup.select('a', href=True) 
                       if i['href'].endswith('.zip')]
 
-    def download_url(self, url, save_path):
+    def download_url(self, url: str, save_path: str) -> None:
         """
-        Função que faz o download dos dados a partir da URL.
+        Function that downlads data from the URL.
         
         Parameters
         ----------            
         url : str
-            URL de download do aqruivo 
+            Full url of the file, created by joining the `base_url` and a file name.
+        
         save_path : str
-            Caminho em que o arquivos será salvo
+            Path of the destination file
 
         Returns
     	-------
         self:
-            retorna uma instância do próprio objeto
+            returns an instance of the object
         """
         r = requests.get(url)
         with open(save_path, 'wb') as fd:
             fd.write(r.content)
     
-    def get_data(self, overwrite):
+    def get_data(self, overwrite: bool) -> None:
         """
-        Wrapper para o download dos dados.
+        Wrapper to download each file in `files`.
         
         Parameters
         ----------            
         overwrite : bool
-            Indicador de que os dados devem ser sobescritos, caso já estejam baixados. Se `true`, os arquivos são sobescritos.
+            Indicator of if the already existing files should be overwritten.
 
         Returns
     	-------
         self:
-            retorna uma instância do próprio objeto
+            returns an instance of the object
         """
         for file in tqdm(self.files):
             url = self.base_url + file
@@ -78,16 +80,18 @@ class CrawlerCNPJ(Crawler):
             else:
                 continue
 
-    def unzip(self):
+    def unzip(self) -> None:
         """
-        Extrai os dados a partir do zip de download.
+        Extract data from the downloaded zipped files.
         
         Parameters
         ----------            
+        None
+
         Returns
     	-------
         self:
-            retorna uma instância do próprio objeto
+            returns an instance of the object
         """
         for file in self.files:   
             filepath = join_path(self.save_dir, file)
@@ -100,26 +104,19 @@ class CrawlerCNPJ(Crawler):
             else:
                 pass
 
-    def run(self, overwrite = True):
+    def run(self, overwrite: bool = True) -> None:
         """
-        Wrapper para execução dos métodos.
+        Wrapper for method execution.
         
         Parameters
         ----------    
         overwrite : bool
-            Indicador de que os dados devem ser sobescritos, caso já estejam baixados. Se `true`, os arquivos são sobescritos.
+            Indicator of if the already existing files should be overwritten.
         
         Returns
     	-------
         self:
-            retorna uma instância do próprio objeto
+            returns an instance of the object
         """
         self.get_data(overwrite)
         self.unzip()
-
-if __name__ == '__main__':
-    if type(sys.argv[1]) is str:
-        crawler = CrawlerCNPJ(sys.argv[1])
-        crawler.run()
-    else:
-        raise Exception("O argumento deve ser um string com o caminho de destino")

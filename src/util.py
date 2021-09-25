@@ -29,7 +29,7 @@ def clean_types(dtype, cols):
 
 def create_dir(path):
     if not os.path.exists(path):
-        os.mkdir(path)
+        os.makedirs(path)
 
 def join_path(*args):
     return os.path.join(*args).replace('\\', '/')

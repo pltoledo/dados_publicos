@@ -1,16 +1,33 @@
-import sys
-import os
-sys.path.append(os.path.abspath(""))
 import pyspark.sql.functions as f
-from src.util import *
+from pyspark.sql import SparkSession
+from util import *
+from variables import SCHEMA_COLS, RAW_READ_OPTS
 import os
-import sys
 import shutil
 
-
 class CleanerCNPJ:
+    """
+    Class used to extract CNPJ data.
+    
+    Parameters
+    ----------
+    spark_session : pyspark.sql.SparkSession
+        Spark Session used to manipulate data
 
-    def __init__(self, spark_session, file_dir, save_dir) -> None:
+    file_dir : str
+        Path to where the raw data is stored.
+
+    save_dir : str
+        Path to where the consolidated data should be stored. It creates a directory if it does not exists already.
+
+    Attributes
+    -------
+    files : str
+        Name of the raw files
+    
+    """
+
+    def __init__(self, spark_session: SparkSession, file_dir: str, save_dir: str) -> None:
 
         self.spark = spark_session
         self.file_dir = file_dir
@@ -18,8 +35,26 @@ class CleanerCNPJ:
         create_dir(save_dir)
         self.files = os.listdir(file_dir)
     
-    def clean_aux_tables(self):
+    def clean_aux_tables(self) -> None:
+        """
+        Consolidate auxiliar tables, used to get the description of some id fields, namely:
 
+        * CNAE (df_cnae)
+        * Municípios (df_mun)
+        * Natureza Jurídica (df_natju)
+        * País (df_pais)
+        * Qualificação de Sócios (df_quals)
+        * Motivo da Situação Cadastral (df_moti)
+        
+        Parameters
+        ----------    
+        None
+        
+        Returns
+    	-------
+        self:
+            returns an instance of the object
+        """
         file_ids = ['CNAE', 'MUNIC', 'NATJU', 'PAIS', 'QUALS', 'MOTI']
         aux_tables = [f for n in file_ids for f in self.files if f.endswith(n + 'CSV')]
         for file, id in zip(aux_tables, file_ids):
@@ -31,8 +66,7 @@ class CleanerCNPJ:
             schema = ', '.join([c + ' STRING' for c in cols])
             df = (
                 self.spark.read.format('csv')
-                .option("encoding", "ISO-8859-1")
-                .option("sep", ";")
+                .options(**RAW_READ_OPTS)
                 .schema(schema)
                 .load(file_path)
             )
@@ -44,18 +78,28 @@ class CleanerCNPJ:
             save_path = join_path(self.save_dir, f'df_{data_name}')
             df.write.format('parquet').option("encoding", "UTF-8").save(save_path)
 
-    def clean_simples(self):
-
+    def clean_simples(self) -> None:
+        """
+        Consolidate the simples table, that contains data concerning micro and small companies that opted
+        to be part of this category.
+        
+        Parameters
+        ----------    
+        None
+        
+        Returns
+    	-------
+        self:
+            returns an instance of the object
+        """
         file = [f for f in self.files if f.find('SIMPLES') != -1][0]
         file_path = join_path(self.file_dir, file)
         # Lê e limpa os dados
-        cols = ['cnpj', 'opcao_simples', 'data_inclusao_simples','data_exclusao_simples',
-                'opcao_mei', 'data_inclusao_mei', 'data_exclusao_mei']
+        cols = SCHEMA_COLS['simples']
         schema = ', '.join([c + ' STRING' for c in cols])
         df = (
             self.spark.read.format('csv')
-            .option("encoding", "ISO-8859-1")
-            .option("sep", ";")
+            .options(**RAW_READ_OPTS)
             .schema(schema)
             .load(file_path)
         )
@@ -66,35 +110,52 @@ class CleanerCNPJ:
         save_path = join_path(self.save_dir, 'df_simples')
         df.write.format('parquet').option("encoding", "UTF-8").save(save_path)
 
-    def write_int_data(self):
-
+    def write_int_data(self) -> None:
+        """
+        Writes data of the biggest tables as intermediate parquet files prior to the consolidation
+        to increase performance and reduce the amount of memory used.
+        
+        Parameters
+        ----------    
+        None
+        
+        Returns
+    	-------
+        self:
+            returns an instance of the object
+        """
         self.int_dir = join_path(self.save_dir, 'int_tables')
         create_dir(self.int_dir)
         file_names = ['EMPRE', 'SOCIO', 'ESTABELE']
-        # Salva em arquivos intermediários para acelerar o processamento
-        read_options = {
-            'encoding': 'ISO-8859-1',
-            'sep': ';',
-        }
         for file in file_names:
             file_path = join_path(self.file_dir, '*', f'{file}CSV')
             if file == 'ESTABELE':
-                read_options['escape'] =  "\""
+                RAW_READ_OPTS['escape'] =  "\""
             int_df = (
                 self.spark.read
                 .format('csv')
-                .options(**read_options)
+                .options(**RAW_READ_OPTS)
                 .load(file_path)
             )
             save_path = join_path(self.int_dir, f'df_{file.lower()}_int')
             int_df.write.option("encoding", "UTF-8").format('parquet').save(save_path)
 
-    def clean_empresas(self):
-
+    def clean_empresas(self) -> None:
+        """
+        Consolidate the dataset containing general information about the company, such as share capital.
+        
+        Parameters
+        ----------    
+        None
+        
+        Returns
+    	-------
+        self:
+            returns an instance of the object
+        """
         file_path = join_path(self.int_dir, f'df_empre_int')
         # Tabela Principal
-        cols = ['cnpj', 'razao_social', 'cod_natju', 'cod_quals', 
-                'capital_social', 'porte', 'ente_fed_resp']
+        cols = SCHEMA_COLS['empresas']
         schema = ', '.join([c + ' STRING' for c in cols])
         df = self.spark.read.schema(schema).load(file_path)
         # Tabelas Auxiliares
@@ -137,12 +198,22 @@ class CleanerCNPJ:
         save_path = join_path(self.save_dir, 'df_empresas')
         df.write.format('parquet').save(save_path)
 
-    def clean_socios(self):
-
+    def clean_socios(self) -> None:
+        """
+        Consolidate the dataset containing information about partners.
+        
+        Parameters
+        ----------    
+        None
+        
+        Returns
+    	-------
+        self:
+            returns an instance of the object
+        """
         file_path = join_path(self.int_dir, f'df_socio_int')
         # Tabela Principal
-        cols = ['cnpj_empresa', 'id_socio', 'nome_socio', 'cpf_cnpj_socio', 'cod_quals', 'data_entrada_sociedade', 
-                    'cod_pais', 'num_rep_legal', 'nome_rep_legal', 'cod_quals_rep_legal', 'faixa_etaria']
+        cols = SCHEMA_COLS['socios']
         schema = ', '.join([c + ' STRING' for c in cols])
         df = self.spark.read.schema(schema).load(file_path)
         # Tabelas Auxiliares
@@ -203,18 +274,23 @@ class CleanerCNPJ:
         save_path = join_path(self.save_dir, 'df_socios')
         df.write.format('parquet').save(save_path)
 
-    def clean_estab(self):
+    def clean_estab(self) -> None:
+        """
+        Consolidate the biggest dataset, that contains all the information of the company at the moment of registration,
+        such as main economic activity, location, contacts etc.
         
+        Parameters
+        ----------    
+        None
+        
+        Returns
+    	-------
+        self:
+            returns an instance of the object
+        """
         file_path = join_path(self.int_dir, f'df_estabele_int')
         # Tabela Principal
-        cols = ['cnpj', 'cnpj_ordem', 'cnpj_dv', 'id_matriz', 'nome_fantasia', 
-                'situacao_cadastral', 'data_situacao_cadastral', 'motivo_situacao_cadastral',
-                'nome_cidade_ext', 'cod_pais', 'data_inicio_atividades', 
-                'cnae_primario', 'cnae_secundario', 
-                'tipo_logradouro', 'logradouro', 'numero', 'complemento', 
-                'bairro', 'cep', 'uf', 'cod_mun', 
-                'ddd_1', 'telefone_1', 'ddd_2', 'telefone_2', 'ddd_fax', 'fax', 
-                'correio_eletronico', 'situacao_especial', 'data_situacao_especial']
+        cols = SCHEMA_COLS['estab']
         schema = ', '.join([c + ' STRING' for c in cols])
         df = self.spark.read.schema(schema).load(file_path)
         # Tabelas Auxiliares
@@ -247,8 +323,19 @@ class CleanerCNPJ:
         save_path = join_path(self.save_dir, 'df_estab')
         df.write.format('parquet').save(save_path)
 
-    def run(self):
-
+    def run(self) -> None:
+        """
+        Wrapper for method execution.
+        
+        Parameters
+        ----------    
+        None
+        
+        Returns
+    	-------
+        self:
+            returns an instance of the object
+        """
         self.clean_aux_tables()
         self.clean_simples()
         self.write_int_data()
@@ -256,25 +343,3 @@ class CleanerCNPJ:
         self.clean_socios()
         self.clean_estab()
         shutil.rmtree(self.int_dir)
-
-if __name__ == "__main__":
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession \
-                .builder \
-                .config("spark.sql.broadcastTimeout", "360000") \
-                .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")\
-                .config('spark.sql.execution.arrow.pyspark.enabled', 'false') \
-                .config("spark.sql.execution.arrow.pyspark.fallback.enabled", "true")\
-                .config("spark.driver.memory", '7G') \
-                .config("spark.driver.maxResultSize", '12G') \
-                .config('spark.sql.adaptive.enabled', 'true') \
-                .config('spark.sql.legacy.parquet.datetimeRebaseModeInWrite', 'LEGACY') \
-                .getOrCreate()
-
-    if len(sys.argv[1::]) > 0:
-        cleaner = CleanerCNPJ(spark, sys.argv[1], sys.argv[2])
-        cleaner.run()
-        spark.stop()
-    else:
-        raise Exception("Os argumentos devem ser strings com os caminhos de origem e destino")

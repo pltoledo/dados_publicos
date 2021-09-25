@@ -1,15 +1,32 @@
-import sys
-import os
-sys.path.append(os.path.abspath(""))
-from crawler import CrawlerCNPJ
-from consolidation import CleanerCNPJ
-from src.base import PublicSource
-from src.util import *
+from .crawler import CrawlerCNPJ
+from .consolidation import CleanerCNPJ
+from base import PublicSource
+from util import *
 
 import logging
 logging.getLogger().setLevel(logging.INFO)
 
 class CNPJSource(PublicSource):
+    """
+    Class used to extract CNPJ data.
+    
+    Parameters
+    ----------
+    spark_session : pyspark.sql.SparkSession
+        Spark Session used to manipulate data
+
+    file_dir : str
+        Root directory where the data will be saved
+
+    Attributes
+    -------
+    crawler : CrawlerCNPJ
+        Object used to extract data from the public source
+
+    cleaner : CleanerCNPJ
+        Object used to consolidate raw data
+    
+    """
 
     def __init__(self, spark_session, file_dir):
         
